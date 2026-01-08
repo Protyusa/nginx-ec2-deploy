@@ -1,3 +1,4 @@
+
 name: Deploy Nginx to EC2
 
 on:
@@ -8,34 +9,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_KEY }}" > ~/.ssh/ssh-key.pem
-          chmod 400 ~/.ssh/ssh-key.pem
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
 
-      - name: Install Nginx on EC2
-        run: |
-          ssh -o StrictHostKeyChecking=no \
-              -i ~/.ssh/ssh-key.pem \
-              ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
-            sudo yum update -y || sudo apt update -y
-            sudo yum install nginx -y || sudo apt install nginx -y
-            sudo systemctl start nginx
-            sudo systemctl enable nginx
-          EOF
+        cat << 'EOF' > ~/.ssh/ssh-key.pem
+        ${{ secrets.EC2_SSH_KEY }}
+        EOF
 
+        chmod 400 ~/.ssh/ssh-key.pem
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy custom webpage
-        run: |
-          scp -i ~/.ssh/ssh-key.pem index.html \
-          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/tmp/index.html
+    - name: Install Nginx on EC2
+      run: |
+        ssh -o StrictHostKeyChecking=no \
+            -i ~/.ssh/ssh-key.pem \
+            ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+          sudo yum update -y
+          sudo yum install nginx -y
+          sudo systemctl start nginx
+          sudo systemctl enable nginx
+        EOF
 
-          ssh -i ~/.ssh/ssh-key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            sudo mv /tmp/index.html /var/www/html/index.html
-            sudo systemctl restart nginx
-          EOF
+    - name: Deploy custom webpage
+      run: |
+        scp -i ~/.ssh/ssh-key.pem \
+            index.html \
+            ec2-user@${{ secrets.EC2_HOST }}:/tmp/index.html
+
+        ssh -i ~/.ssh/ssh-key.pem \
+            ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+          sudo mv /tmp/index.html /usr/share/nginx/html/index.html
+          sudo systemctl restart nginx
+        EOF
